@@ -50,7 +50,7 @@ from .VStack import *
 from .SCAD import *
 from .Log import *
 from .ETP import *
-from .Geman import Geman
+from .Geman import *
 
 __all__ = ['Box', 'Simplex', 'Intersection', 'AffineSet', 'Quadratic',
            'Euclidean', 'EuclideanBall', 'L0Ball', 'L1', 'L1Ball', 'L2',
