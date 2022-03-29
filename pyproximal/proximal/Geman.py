@@ -3,23 +3,6 @@ import numpy as np
 from pyproximal.ProxOperator import _check_tau
 from pyproximal import ProxOperator
 
-import math
-
-
-# Helper function to return float value of f.
-def findF(a, b, c):
-    return ((3.0 * c / a) - ((b ** 2.0) / (a ** 2.0))) / 3.0
-
-
-# Helper function to return float value of g.
-def findG(a, b, c, d):
-    return (((2.0 * (b ** 3.0)) / (a ** 3.0)) - ((9.0 * b * c) / (a ** 2.0)) + (27.0 * d / a)) / 27.0
-
-
-# Helper function to return float value of h.
-def findH(g, f):
-    return ((g ** 2.0) / 4.0 + (f ** 3.0) / 27.0)
-
 
 class Geman(ProxOperator):
     r"""Geman penalty.
