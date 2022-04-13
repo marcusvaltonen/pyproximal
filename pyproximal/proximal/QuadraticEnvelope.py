@@ -92,25 +92,28 @@ class QuadraticEnvelopeCardIndicator(ProxOperator):
     r"""Quadratic envelope of the indicator function of :math:`\ell_0`-penalty.
 
     The :math:`\ell_0`-penalty is also known as the *cardinality function*, and the
-    indicator function is
+    indicator function :math:`\mathcal{I}_{r_0}` is defined as
 
     .. math::
 
-        \mathcal{I}_{r_0}(\mathbf{x}) = \mathcal{I}_{\|\cdot\|_0\leq r_0}(\mathbf{x}) =
+        \mathcal{I}_{r_0}(\mathbf{x}) =
         \begin{cases}
         0, & \mathbf{x}\leq r_0 \\
         \infty, & \text{otherwise}
         \end{cases}
 
-    The quadratic envelope :math:`\mathcal{Q}(\mathcal{I}_{r_0})` can be written as
+    Let :math:`\tilde{\mathbf{x}}` denote the vector :math:`\mathbf{x}` resorted such that the
+    sequence :math:`(\tilde{x}_i)` is non-increasing. The quadratic envelope
+    :math:`\mathcal{Q}(\mathcal{I}_{r_0})` can then be written as
 
     .. math::
 
         \mathcal{Q}(\mathcal{I}_{r_0})(x) =
-        \frac{1}{k^*}\left(\sum_{i>r_0-k^*}|x_i|\right)^2 - \left(\sum_{i>r_0-k^*}|x_i|^2
+        \frac{1}{2k^*}\left(\sum_{i>r_0-k^*}|\tilde{x}_i|\right)^2
+        - \frac{1}{2}\left(\sum_{i>r_0-k^*}|\tilde{x}_i|^2
 
-    where :math:`r_0 \geq 0`, and :math:`k^* \leq r_0`, see [3]_ for details. There are
-    other, equivalent ways, of writing this penalty, see e.g. [1]_ and [2]_.
+    where :math:`r_0 \geq 0` and :math:`k^* \leq r_0`, see [3]_ for details. There are
+    other, equivalent ways, of expressing this penalty, see e.g. [1]_ and [2]_.
 
     Parameters
     ----------
@@ -134,7 +137,7 @@ class QuadraticEnvelopeCardIndicator(ProxOperator):
     function :math:`f`. However, for certain special cases, such as in the case of the
     indicator function of the cardinality function, such expressions do exist.
 
-    The proximal operator is given by
+    The proximal operator is given by (FIX THIS)
 
     .. math::
 
@@ -162,39 +165,17 @@ class QuadraticEnvelopeCardIndicator(ProxOperator):
         self.r0 = r0
 
     def __call__(self, x):
-        #TODO: Implement this (non-separable), so elementwise not possible
-        #TODO: write a hankel recovery tutorial.
-        """
-        function[out, putative, ell] = Rr0_mod(X, r0)
-
-        if size(X, 2) > 1
-            sing = svd(X, 'econ');
-        else
-            sing = X;
-        end
-
-        sums = cumsum(X, 'reverse');
-        sings_ext = [inf;
-        sing;
-        0];
-
-        ell = 0;
-        for j = 1:r0
-        putative = 1 / (r0 - j + 1) * sums(j);
-        if sings_ext(j) >= putative & & putative >= sings_ext(j + 1)
-            ell = j - 1;
-            break;
-        end
-
-    end
-
-    % n = length(sing);
-    % out = (n - r0) * putative ^ 2 - sum((putative - sing(ell + 1:end)). ^ 2);
-    % out = 2 * putative * sum(sing(ell + 1:end)) - sum(sing(ell + 1: end).^ 2)-(r0 - ell) * putative ^ 2
-    out = 1 / (r0 - ell) * sum(sing(ell + 1:end)) ^ 2 - sum(sing(ell + 1: end).^ 2);
-
-"""
-    pass
+        # TODO: Write a hankel recovery tutorial.
+        if x.size <= self.r0 or np.count_nonzero(x) <= self.r0:
+            return 0
+        xs = np.sort(np.abs(x))[::-1]
+        sums = np.cumsum(xs[::-1])
+        sums = sums[-self.r0:] / np.arange(1, self.r0 + 1)
+        tmp = np.diff(sums) > 0
+        k_star = np.argmax(tmp)
+        if k_star == 0 and not tmp[k_star]:
+            k_star = self.r0 - 1
+        return (k_star + 1) * sums[k_star] ** 2 - np.sum(xs[self.r0-k_star-1:] ** 2)
 
     @_check_tau
     def prox(self, x, tau):
@@ -207,3 +188,10 @@ class QuadraticEnvelopeCardIndicator(ProxOperator):
         else:
             r[idx] = np.maximum(0, (r[idx] - tau * np.sqrt(2 * self.mu)) / (1 - tau))
         return r * np.sign(x)
+
+
+if __name__ == '__main__':
+    penalty = QuadraticEnvelopeCardIndicator(4)
+    for i in range(1):
+        x = np.random.randn(i + 9)
+        print(f'penalty={penalty(x)}')
