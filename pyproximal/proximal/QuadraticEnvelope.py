@@ -175,19 +175,94 @@ class QuadraticEnvelopeCardIndicator(ProxOperator):
         k_star = np.argmax(tmp)
         if k_star == 0 and not tmp[k_star]:
             k_star = self.r0 - 1
-        return (k_star + 1) * sums[k_star] ** 2 - np.sum(xs[self.r0-k_star-1:] ** 2)
+        return 0.5 * ((k_star + 1) * sums[k_star] ** 2 - np.sum(xs[self.r0-k_star-1:] ** 2))
 
     @_check_tau
     def prox(self, x, tau):
         #TODO: Implement this
+        """
+function [ X, zk, yk, Rr0 ] = prox_r0_rank( X0, r0, rho )
+% Solves the problem
+%   min_X R_r0(X) + rho * |X-X0|^2
 
-        r = np.abs(x)
-        idx = r < np.sqrt(2 * self.mu)
-        if tau >= 1:
-            r[idx] = 0
-        else:
-            r[idx] = np.maximum(0, (r[idx] - tau * np.sqrt(2 * self.mu)) / (1 - tau))
-        return r * np.sign(x)
+[U,S,V] = svd(X,'econ');
+yk = diag(S);
+n = length(yk);
+[p,ind] = sort([yk(1:r0);rho*yk(r0+1:end)]);
+
+a = (n-r0)/(rho-1);
+b = rho/(rho-1) * sum(yk(r0+1:end));
+
+% base case
+zk = yk;
+zk(r0+1:end) = (1+rho)*yk(r0+1:end);
+
+for k = 1:length(p)-1
+    % interval [p(k) p(k+1)]
+
+    if ind(k) <= r0
+        a = a + rho/(rho-1);
+        b = b + rho/(rho-1) * yk(ind(k));
+    end
+
+    if ind(k) > r0
+        a = a - 1/(rho-1);
+        b = b - rho/(rho-1) * yk(ind(k));
+    end
+
+    s = b / a;
+
+    if p(k) <= s && s <= p(k+1)
+        zk = max(s, yk);
+        zk(r0+1:n) = min(s, rho*yk(r0+1:n));
+        break;
+    end
+end
+
+c = @(s) sum(-rho/(rho-1)*max(0,s-yk(1:r0)).^2) + ...
+    sum(-1/(rho-1)*max(0,(rho+1)*yk(r0+1:n)-s).^2+rho*yk(r0+1:n).^2);
+
+Rr0 = c(s);
+
+Z = U*diag(zk)*V';
+"""
+        rho = 1 / tau
+        yk = np.sort(np.abs(x))[::-1]
+        n = yk.size
+        ind = np.argsort(np.concatenate((yk[:self.r0], rho * yk[self.r0:])))
+        p = yk[ind]
+
+        a = (n-self.r0)/(rho-1)
+        b = rho/(rho-1) * np.sum(yk[self.r0:])
+
+        # base case
+        zk = yk.copy()
+        zk[self.r0:] = rho * yk[self.r0:]
+
+        for k in range(p.size - 1):
+            # interval [p(k) p(k+1)]
+
+            if ind[k] < self.r0:
+                a = a + rho/(rho-1)
+                b = b + rho/(rho-1) * yk[ind[k]]
+
+            if ind[k] >= self.r0:
+                a = a - 1/(rho-1)
+                b = b - rho/(rho-1) * yk[ind[k]]
+
+            s = b / a
+
+            if p[k] <= s <= p[k + 1]:
+                zk = np.maximum(s, yk)
+                zk[self.r0:] = np.minimum(s, rho * yk[self.r0:])
+                break
+
+        c = lambda s: np.sum(-rho/(rho-1)*np.maximum(0,s-yk[:self.r0]) ** 2) + \
+            np.sum(-1/(rho-1)*np.maximum(0,rho * yk[self.r0:]-s)**2+rho*yk[self.r0:]**2)
+
+        Rr0 = c(s)
+
+        return zk, Rr0
 
 
 if __name__ == '__main__':
@@ -195,3 +270,5 @@ if __name__ == '__main__':
     for i in range(1):
         x = np.random.randn(i + 9)
         print(f'penalty={penalty(x)}')
+        print(f'penalty={penalty.prox(x, 0.5)}')
+
