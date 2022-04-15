@@ -264,11 +264,57 @@ Z = U*diag(zk)*V';
 
         return zk, Rr0
 
+    @_check_tau
+    def prox2(self, y, tau):
+        rho = 1 / tau
+        if rho <= 1:
+            # TODO: hardthresh
+            pass
+
+        r = np.abs(y)
+        #theta = exp(i * angle(y));
+        theta = np.sign(y)
+        n = y.size
+        id = np.argsort(r)[::-1]
+        rsort = r[id]
+
+        #idinv(id) = [1:n];
+        idinv = np.argsort(r[::-1])
+        rnew = np.concatenate((rsort[:self.r0], rho * rsort[self.r0:]))
+
+        if rho * rsort[self.r0] < rsort[self.r0 - 1]:
+            x = rnew
+            x = x[idinv]
+            x = x * theta
+        else:
+            j = np.min(np.where(rnew <= rnew[self.r0])[0])
+            l = np.max(np.where(rnew >= rnew[self.r0 - 1])[0])
+
+            z = np.sort(rnew[j:l + 1])[::-1]
+            z1 = z[0]
+            for z2 in z[1:]:
+                s = (z1 + z2) / 2
+                print(s)
+                temp = np.where(rnew <= s)[0]
+                j1 = np.min(temp)
+                temp = np.where(rnew >= s)[0]
+                l1 = np.max(temp)
+                print(f'j1={j1}, l1={l1}, rsort={rsort[j1:l1 + 1]}')
+                sI = (rho * sum(rsort[j1:l1 + 1])) / ((self.r0 - j1) * rho + (l1 + 1- self.r0) * 1)
+                print(f'sI={sI}')
+                if z2 <= sI <= z1:
+                    x = np.concatenate((np.maximum(rnew[:self.r0], sI), np.minimum(rnew[self.r0:], sI)))
+                    x = x[idinv]
+                    x = x * theta
+                    break
+                z1 = z2
+
+        return (rho * y - x) / (rho - 1)
+
 
 if __name__ == '__main__':
     penalty = QuadraticEnvelopeCardIndicator(4)
-    for i in range(1):
-        x = np.random.randn(i + 9)
-        print(f'penalty={penalty(x)}')
-        print(f'penalty={penalty.prox(x, 0.5)}')
+    x = np.array([1, 5, 3, 4, 2, 6, 7, 8])+1.2
+    print(f'penalty={penalty(x)}')
+    print(f'penalty={penalty.prox2(x, 1 / 1.5)}')
 

@@ -5,7 +5,7 @@ from numpy.testing import assert_array_equal, assert_array_almost_equal
 from pylops import MatrixMult, Identity
 from pyproximal.utils import moreau
 from pyproximal.proximal import Quadratic, Nonlinear, \
-    L1, L2, Orthogonal, VStack
+    L1, L2, Orthogonal, QuadraticEnvelopeCardIndicator, VStack
 
 par1 = {'nx': 10, 'sigma': 1., 'dtype': 'float32'}  # even float32
 par2 = {'nx': 11, 'sigma': 2., 'dtype': 'float64'}  # odd float64
@@ -115,4 +115,5 @@ def test_Nonlinear():
         Nop.optimize()
 
 
-
+def test_QuadraticEnvelopeCardIndicator():
+    pass
