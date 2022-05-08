@@ -1,5 +1,6 @@
 import numpy as np
 
+from pylops.optimization.sparsity import _hardthreshold
 from pyproximal.ProxOperator import _check_tau
 from pyproximal import ProxOperator
 
@@ -137,17 +138,7 @@ class QuadraticEnvelopeCardIndicator(ProxOperator):
     function :math:`f`. However, for certain special cases, such as in the case of the
     indicator function of the cardinality function, such expressions do exist.
 
-    The proximal operator is given by (FIX THIS)
-
-    .. math::
-
-        \prox_{\tau\mathcal{Q}(\mu\|\cdot\|_0)}(x) =
-        \begin{cases}
-        x_i, & |x_i| \geq \sqrt{2 \mu} \\
-        \frac{x_i-\tau\sqrt{2\mu}\sgn(x_i)}{1-\tau}, & \tau\sqrt{2\mu} < |x_i| < \sqrt{2 \mu} \\
-        0, & |x_i| \leq \tau\sqrt{2 \mu}
-        \end{cases}
-
+    The proximal operator does not have a closed-form, and we refer to [1]_ for more details.
     Note that this is a non-separable penalty.
 
     .. [1] Carlsson, M. "On Convex Envelopes and Regularization of Non-convex
@@ -178,108 +169,20 @@ class QuadraticEnvelopeCardIndicator(ProxOperator):
         return 0.5 * ((k_star + 1) * sums[k_star] ** 2 - np.sum(xs[self.r0-k_star-1:] ** 2))
 
     @_check_tau
-    def prox(self, x, tau):
-        #TODO: Implement this
-        """
-function [ X, zk, yk, Rr0 ] = prox_r0_rank( X0, r0, rho )
-% Solves the problem
-%   min_X R_r0(X) + rho * |X-X0|^2
-
-[U,S,V] = svd(X,'econ');
-yk = diag(S);
-n = length(yk);
-[p,ind] = sort([yk(1:r0);rho*yk(r0+1:end)]);
-
-a = (n-r0)/(rho-1);
-b = rho/(rho-1) * sum(yk(r0+1:end));
-
-% base case
-zk = yk;
-zk(r0+1:end) = (1+rho)*yk(r0+1:end);
-
-for k = 1:length(p)-1
-    % interval [p(k) p(k+1)]
-
-    if ind(k) <= r0
-        a = a + rho/(rho-1);
-        b = b + rho/(rho-1) * yk(ind(k));
-    end
-
-    if ind(k) > r0
-        a = a - 1/(rho-1);
-        b = b - rho/(rho-1) * yk(ind(k));
-    end
-
-    s = b / a;
-
-    if p(k) <= s && s <= p(k+1)
-        zk = max(s, yk);
-        zk(r0+1:n) = min(s, rho*yk(r0+1:n));
-        break;
-    end
-end
-
-c = @(s) sum(-rho/(rho-1)*max(0,s-yk(1:r0)).^2) + ...
-    sum(-1/(rho-1)*max(0,(rho+1)*yk(r0+1:n)-s).^2+rho*yk(r0+1:n).^2);
-
-Rr0 = c(s);
-
-Z = U*diag(zk)*V';
-"""
-        rho = 1 / tau
-        yk = np.sort(np.abs(x))[::-1]
-        n = yk.size
-        ind = np.argsort(np.concatenate((yk[:self.r0], rho * yk[self.r0:])))
-        p = yk[ind]
-
-        a = (n-self.r0)/(rho-1)
-        b = rho/(rho-1) * np.sum(yk[self.r0:])
-
-        # base case
-        zk = yk.copy()
-        zk[self.r0:] = rho * yk[self.r0:]
-
-        for k in range(p.size - 1):
-            # interval [p(k) p(k+1)]
-
-            if ind[k] < self.r0:
-                a = a + rho/(rho-1)
-                b = b + rho/(rho-1) * yk[ind[k]]
-
-            if ind[k] >= self.r0:
-                a = a - 1/(rho-1)
-                b = b - rho/(rho-1) * yk[ind[k]]
-
-            s = b / a
-
-            if p[k] <= s <= p[k + 1]:
-                zk = np.maximum(s, yk)
-                zk[self.r0:] = np.minimum(s, rho * yk[self.r0:])
-                break
-
-        c = lambda s: np.sum(-rho/(rho-1)*np.maximum(0,s-yk[:self.r0]) ** 2) + \
-            np.sum(-1/(rho-1)*np.maximum(0,rho * yk[self.r0:]-s)**2+rho*yk[self.r0:]**2)
-
-        Rr0 = c(s)
-
-        return zk, Rr0
-
-    @_check_tau
-    def prox2(self, y, tau):
+    def prox(self, y, tau):
         rho = 1 / tau
         if rho <= 1:
-            # TODO: hardthresh
-            pass
+            # TODO: Consider adding warning
+            return _hardthreshold(y, tau)
+        if y.size <= self.r0:
+            return y
 
         r = np.abs(y)
-        #theta = exp(i * angle(y));
         theta = np.sign(y)
-        n = y.size
-        id = np.argsort(r)[::-1]
+        id = np.argsort(-r, kind='quicksort')
         rsort = r[id]
-
-        #idinv(id) = [1:n];
-        idinv = np.argsort(r[::-1])
+        idinv = np.zeros_like(id)
+        idinv[id] = np.arange(r.size)
         rnew = np.concatenate((rsort[:self.r0], rho * rsort[self.r0:]))
 
         if rho * rsort[self.r0] < rsort[self.r0 - 1]:
@@ -289,7 +192,6 @@ Z = U*diag(zk)*V';
         else:
             j = np.min(np.where(rnew <= rnew[self.r0])[0])
             l = np.max(np.where(rnew >= rnew[self.r0 - 1])[0])
-
             z = np.sort(rnew[j:l + 1])[::-1]
             z1 = z[0]
             for z2 in z[1:]:
@@ -299,9 +201,7 @@ Z = U*diag(zk)*V';
                 j1 = np.min(temp)
                 temp = np.where(rnew >= s)[0]
                 l1 = np.max(temp)
-                print(f'j1={j1}, l1={l1}, rsort={rsort[j1:l1 + 1]}')
-                sI = (rho * sum(rsort[j1:l1 + 1])) / ((self.r0 - j1) * rho + (l1 + 1- self.r0) * 1)
-                print(f'sI={sI}')
+                sI = (rho * sum(rsort[j1:l1 + 1])) / ((self.r0 - j1) * rho + (l1 + 1 - self.r0) * 1)
                 if z2 <= sI <= z1:
                     x = np.concatenate((np.maximum(rnew[:self.r0], sI), np.minimum(rnew[self.r0:], sI)))
                     x = x[idinv]
@@ -314,7 +214,8 @@ Z = U*diag(zk)*V';
 
 if __name__ == '__main__':
     penalty = QuadraticEnvelopeCardIndicator(4)
-    x = np.array([1, 5, 3, 4, 2, 6, 7, 8])+1.2
+    x = np.array([1, 1.5, 1.3, 4.1, 2.1, 1.6, 1.7, 1.8]) + 1.2
+    #x = np.array([1, 1, 1, 0.1, 1]) + 1.2
     print(f'penalty={penalty(x)}')
-    print(f'penalty={penalty.prox2(x, 1 / 1.5)}')
+    print(f'penalty={penalty.prox(x, 1 / 1.5)}')
 
